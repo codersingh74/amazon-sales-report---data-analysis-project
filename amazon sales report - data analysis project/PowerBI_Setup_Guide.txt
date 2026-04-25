@@ -1,0 +1,165 @@
+
+# Power BI Dashboard Setup Guide
+# Amazon India Fashion Sales Analysis
+# =====================================
+
+## STEP 1: Import Data
+1. Open Power BI Desktop
+2. Click "Get Data" → "Text/CSV"
+3. Select amazon_cleaned.csv
+4. Click "Transform Data" to open Power Query Editor
+
+## STEP 2: Data Transformations in Power Query
+- Change 'date' column to Date type
+- Change 'amount', 'order_revenue' to Decimal Number
+- Change 'qty', 'is_cancelled', 'is_delivered' to Whole Number
+- Change 'b2b' to True/False (Boolean)
+- Create a Date Table (below)
+
+## STEP 3: Create Date Table (DAX)
+DateTable = 
+CALENDAR(
+    DATE(2022, 3, 1),
+    DATE(2022, 6, 30)
+)
+
+Add columns to DateTable:
+- Month = FORMAT(DateTable[Date], "MMMM")
+- MonthNum = MONTH(DateTable[Date])
+- Quarter = "Q" & QUARTER(DateTable[Date])
+- WeekNum = WEEKNUM(DateTable[Date])
+
+Then create relationship: DateTable[Date] → orders[date]
+
+## STEP 4: DAX Measures (Create all in "Measures" table)
+
+-- Core Measures --
+Total Orders = COUNTROWS(orders)
+
+Total Revenue = 
+SUMX(
+    FILTER(orders, orders[is_cancelled] = 0),
+    orders[order_revenue]
+)
+
+Avg Order Value = 
+DIVIDE([Total Revenue], 
+       COUNTROWS(FILTER(orders, orders[is_cancelled]=0)))
+
+Cancellation Rate = 
+DIVIDE(
+    COUNTROWS(FILTER(orders, orders[is_cancelled] = 1)),
+    COUNTROWS(orders),
+    0
+)
+
+Delivery Rate = 
+DIVIDE(
+    COUNTROWS(FILTER(orders, orders[is_delivered] = 1)),
+    COUNTROWS(orders),
+    0
+)
+
+Return Rate = 
+DIVIDE(
+    COUNTROWS(FILTER(orders, orders[is_returned] = 1)),
+    COUNTROWS(orders),
+    0
+)
+
+High Value Orders = 
+COUNTROWS(FILTER(orders, orders[amount] > 1000 && orders[is_cancelled] = 0))
+
+-- Time Intelligence Measures --
+Revenue Last Month = 
+CALCULATE(
+    [Total Revenue],
+    DATEADD(DateTable[Date], -1, MONTH)
+)
+
+MoM Revenue Growth = 
+DIVIDE(
+    [Total Revenue] - [Revenue Last Month],
+    [Revenue Last Month],
+    0
+)
+
+-- B2B Specific --
+B2B Revenue = 
+CALCULATE([Total Revenue], orders[b2b] = 1)
+
+B2C Revenue = 
+CALCULATE([Total Revenue], orders[b2b] = 0)
+
+B2B Order Share = 
+DIVIDE(
+    CALCULATE(COUNTROWS(orders), orders[b2b] = 1),
+    COUNTROWS(orders)
+)
+
+-- Fulfilment Measures --
+Amazon Fulfilled Revenue = 
+CALCULATE([Total Revenue], orders[fulfilment] = "Amazon")
+
+Merchant Fulfilled Revenue = 
+CALCULATE([Total Revenue], orders[fulfilment] = "Merchant")
+
+## STEP 5: PAGE 1 — Sales Overview Dashboard
+
+Layout (1280 × 720px canvas):
+
+[ROW 1 - KPI Cards - 5 cards across top]
+┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+│Total Orders │ │ Net Revenue │ │ Avg Order   │ │Cancel Rate% │ │Delivery Rate│
+│  128,975    │ │ ₹7.2Cr+     │ │  Value ₹648 │ │   14.2%     │ │   22.3%     │
+└─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘
+
+[ROW 2 - Main Charts]
+┌─────────────────────────────┐  ┌──────────────────────────┐
+│ Line Chart:                 │  │ Bar Chart (Horizontal):  │
+│ Monthly Orders &            │  │ Top 10 States by Revenue │
+│ Revenue Trend               │  │                          │
+│ (April-June 2022)           │  │                          │
+└─────────────────────────────┘  └──────────────────────────┘
+
+[ROW 3 - Lower Charts]
+┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+│ Donut Chart:     │  │ Stacked Bar:     │  │ Slicers:         │
+│ Category Revenue │  │ Fulfilment Type  │  │ - Category       │
+│ Share            │  │ Order Status     │  │ - Date Range     │
+│                  │  │                  │  │ - Fulfilment     │
+└──────────────────┘  └──────────────────┘  └──────────────────┘
+
+Visual Settings for each:
+- KPI Cards: Card visual, large font, colored background per metric
+- Line Chart: X=Month, Y=Total Orders + Total Revenue (dual axis)
+- State Bar: Y=ship_state, X=Total Revenue, Top N filter = 10
+- Donut: Legend=Category, Values=Total Revenue
+- Stacked Bar: X=Fulfilment, Y=Orders, Legend=Status group
+
+## STEP 6: PAGE 2 — Operations Deep Dive
+
+[ROW 1]
+┌──────────────────────────────┐  ┌──────────────────────────────┐
+│ Matrix Visual:               │  │ India Map Visual:            │
+│ Rows=Category                │  │ Location=ship_state          │
+│ Cols=Status                  │  │ Size/Color=Total Revenue     │
+│ Values=Order Count           │  │                              │
+│ (Heatmap color by value)     │  │                              │
+└──────────────────────────────┘  └──────────────────────────────┘
+
+[ROW 2]
+┌──────────────────────────────┐  ┌──────────────────────────────┐
+│ Clustered Bar:               │  │ Table:                       │
+│ Size-wise Order Count        │  │ Category | Orders | Revenue  │
+│ (sorted: M,L,XL,XXL,S,3XL)  │  │ Cancel% | Delivery%         │
+│                              │  │ (Sorted by Cancel Rate)      │
+└──────────────────────────────┘  └──────────────────────────────┘
+
+## STEP 7: Formatting Theme
+Primary Color: #FF9900 (Amazon Orange)
+Secondary Color: #232F3E (Amazon Dark)
+Background: #FAFAFA
+Font: Segoe UI
+Card Background: White with subtle shadow
+Title Font Size: 14px Bold
